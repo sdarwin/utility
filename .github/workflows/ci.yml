@@ -246,6 +246,11 @@ jobs:
               - flex
               - bison
               - rsync
+              - python3-pip
+              - ruby
+              - docutils-doc
+              - docutils-common
+              - python3-docutils
             os: ubuntu-18.04
 
     timeout-minutes: 60
@@ -445,11 +450,14 @@ jobs:
           set -xe
 
           echo '==================================> INSTALL'
-
-          export SELF=`basename $REPO_NAME`
+          export LIB_NAME=$(basename $GITHUB_REPOSITORY)
 
           pwd
           cd ..
+
+          sudo gem install asciidoctor --version 1.5.8
+          sudo pip3 install --user docutils
+
           mkdir -p $HOME/cache && cd $HOME/cache
           if [ ! -d doxygen ]; then git clone -b 'Release_1_8_15' --depth 1 https://github.com/doxygen/doxygen.git && echo "not-cached" ; else echo "cached" ; fi
           cd doxygen
@@ -471,12 +479,17 @@ jobs:
           git submodule update --init tools/boostdep
           git submodule update --init tools/docca
           git submodule update --init tools/quickbook
-          rsync -av $GITHUB_WORKSPACE/ libs/$SELF
+          git submodule update --init tools/auto_index
           python tools/boostdep/depinst/depinst.py ../tools/quickbook
+          rm -rf libs/$LIB_NAME/* || true
+          rm -rf libs/$LIB_NAME/.* || true
+
+          rsync -av --delete $GITHUB_WORKSPACE/ libs/$LIB_NAME
           ./bootstrap.sh
           ./b2 headers
 
           echo '==================================> SCRIPT'
 
-          echo "using doxygen ; using boostbook ; using saxonhe ;" > tools/build/src/user-config.jam
+          ./b2 -q -d0 --build-dir=build --distdir=build/dist tools/quickbook tools/auto_index/build
+          echo "using quickbook : build/dist/bin/quickbook ; using auto-index : build/dist/bin/auto_index ; using docutils ; using doxygen ; using boostbook ; using asciidoctor ; using saxonhe ;" > tools/build/src/user-config.jam
           ./b2 -j3 libs/$SELF/doc//boostrelease
